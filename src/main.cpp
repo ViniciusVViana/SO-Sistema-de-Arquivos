@@ -5,18 +5,19 @@ using namespace std;
 
 int main(int argc, char *argv[]) {
     // Verifica se o caminho do disco foi fornecido
-    if (argc < 2) {
-        cerr << "Uso: " << argv[0] << " <caminho_do_disco>" << endl;
+    if (argc < 3) {
+        cerr << "Uso: " << argv[0] << " <caminho_do_disco> <numero_de_blocos>" << endl;
         return EXIT_FAILURE;
     }
 
     string diskPath = argv[1]; // Obtém o caminho do disco do primeiro argumento
+    string numBlocos = argv[2];
 
     try {
         FileSystem fs(diskPath);
 
         // Inicializa o disco com 1000 blocos
-        fs.init(1000);
+        fs.init(stoi(numBlocos));
 
         // Lista o superbloco
         cout << "Superblock:" << endl;
