@@ -186,121 +186,29 @@ public:
         diskManager.close();
         throw runtime_error("Arquivo não encontrado!");
     }
+    //TODO: fazer essa merda funcionar
     //Escrever em um arquivo
     void writeFile(const std::string &filename, const char *data, uint32_t size) {
         try {
             // Abre o gerenciador de disco
             diskManager.open();
     
-            // Lê o bloco de índice do diretório raiz
             IndexBlock rootIndexBlock;
-            diskManager.readBlock(superblock.root_dir_index, reinterpret_cast<char*>(&rootIndexBlock));
-    
-            // Procura o arquivo no diretório raiz
-            bool fileFound = false;
-            RootDirEntry fileEntry;
-    
-            for (uint32_t i = 0; i < rootIndexBlock.block_ptrs.size(); i++) {
-                if (rootIndexBlock.block_ptrs[i] == 0xFFFFFFFF) {
-                    continue; // Bloco de dados do diretório raiz não alocado
-                }
-    
-                // Verifica se o ponteiro do bloco é válido
-                if (rootIndexBlock.block_ptrs[i] >= superblock.total_blocks) {
-                    throw std::runtime_error("Ponteiro de bloco de dados do diretório raiz inválido!");
-                }
-    
-                // Lê o bloco de dados do diretório raiz
-                std::vector<RootDirEntry> dirEntries(BLOCK_SIZE / sizeof(RootDirEntry));
-                diskManager.readBlock(rootIndexBlock.block_ptrs[i], reinterpret_cast<char*>(dirEntries.data()));
-    
-                // Procura o arquivo no bloco de dados do diretório raiz
-                for (const auto &entry : dirEntries) {
-                    if (entry.filename[0] != '\0' && strcmp(entry.filename, filename.c_str()) == 0) {
-                        fileFound = true;
-                        fileEntry = entry;
-                        break;
-                    }
-                }
-    
-                if (fileFound) {
-                    break;
-                }
+
+            // Pegar a partir do próximo bloco após o diretorio raiz
+            diskManager.readBlock(superblock.root_dir_index+1, reinterpret_cast<char*>(&rootIndexBlock));
+            
+            //Exibir as informações do bloco de índice
+            cout << "Index Block: " << superblock.root_dir_index << endl;
+            cout << "Direct Pointers: ";
+            for (const auto &ptr : rootIndexBlock.block_ptrs) {
+                cout << ptr << " ";
             }
-    
-            if (!fileFound) {
-                throw std::runtime_error("Arquivo não encontrado no diretório raiz!");
-            }
-    
-            // Acessa o bloco de índice do arquivo
-            IndexBlock fileIndexBlock;
-            diskManager.readBlock(fileEntry.index_block, reinterpret_cast<char*>(&fileIndexBlock));
-    
-            // Escreve os dados no arquivo
-            uint32_t bytesWritten = 0;
-            uint32_t currentBlockOffset = 0;
-    
-            while (bytesWritten < size) {
-                // Verifica se o offset está dentro dos limites
-                if (currentBlockOffset >= fileIndexBlock.block_ptrs.size()) {
-                    throw std::runtime_error("Offset de bloco fora dos limites!");
-                }
-    
-                // Verifica se o ponteiro de bloco é válido
-                if (fileIndexBlock.block_ptrs[currentBlockOffset] == 0xFFFFFFFF) {
-                    // Aloca um novo bloco de dados
-                    fileIndexBlock.block_ptrs[currentBlockOffset] = allocBlock();
-                    if (fileIndexBlock.block_ptrs[currentBlockOffset] == 0xFFFFFFFF) {
-                        throw std::runtime_error("Não há blocos disponíveis para alocação!");
-                    }
-                }
-    
-                if (fileIndexBlock.block_ptrs[currentBlockOffset] >= superblock.total_blocks) {
-                    throw std::runtime_error("Ponteiro de bloco inválido!");
-                }
-    
-                // Escreve os dados no bloco de dados
-                uint32_t writeSize = std::min(size - bytesWritten, BLOCK_SIZE);
-                diskManager.writeBlock(fileIndexBlock.block_ptrs[currentBlockOffset], reinterpret_cast<void*>(const_cast<char*>(data + bytesWritten)));
-                bytesWritten += writeSize;
-                currentBlockOffset++;
-            }
-    
-            // Atualiza o bloco de índice do arquivo no disco
-            diskManager.writeBlock(fileEntry.index_block, reinterpret_cast<char*>(&fileIndexBlock));
-    
-            // Atualiza o tamanho do arquivo no diretório raiz
-            fileEntry.file_size = bytesWritten;
-    
-            // Atualiza a entrada do diretório raiz no disco
-            for (uint32_t i = 0; i < rootIndexBlock.block_ptrs.size(); i++) {
-                if (rootIndexBlock.block_ptrs[i] == 0xFFFFFFFF) {
-                    continue; // Bloco de dados do diretório raiz não alocado
-                }
-    
-                // Lê o bloco de dados do diretório raiz
-                std::vector<RootDirEntry> dirEntries(BLOCK_SIZE / sizeof(RootDirEntry));
-                diskManager.readBlock(rootIndexBlock.block_ptrs[i], reinterpret_cast<char*>(dirEntries.data()));
-    
-                // Procura o arquivo no bloco de dados do diretório raiz
-                for (auto &entry : dirEntries) {
-                    if (entry.filename[0] != '\0' && strcmp(entry.filename, filename.c_str()) == 0) {
-                        entry = fileEntry;
-                        diskManager.writeBlock(rootIndexBlock.block_ptrs[i], reinterpret_cast<char*>(dirEntries.data()));
-                        break;
-                    }
-                }
-            }
-    
-            // Fecha o gerenciador de disco
-            diskManager.close();
-    
-            std::cout << "Dados escritos no arquivo com sucesso!" << std::endl;
+            cout << endl;
+            cout << "Indirect Pointer: " << rootIndexBlock.indirect_ptr << endl;
+
         } catch (const std::exception &e) {
-            // Fecha o gerenciador de disco em caso de erro
-            diskManager.close();
-            std::cerr << "Erro ao escrever no arquivo: " << e.what() << std::endl;
-            throw; // Re-lança a exceção para tratamento adicional
+            std::cerr << e.what() << std::endl;
         }
     }
 

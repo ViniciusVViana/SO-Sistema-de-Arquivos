@@ -26,9 +26,7 @@ public:
 
     void close() {
         if (disk.is_open()) {
-            cout << "Fechando o gerenciador de disco..." << endl;
             disk.close();
-            cout << "Fechou o gerenciador de disco." << endl;
         } else {
             cout << "O gerenciador de disco já estava fechado." << endl;
         }

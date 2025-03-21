@@ -42,7 +42,6 @@ struct Superblock{
     uint32_t bitmap_blocks; //Número de blocos ocupados pelo bitmap.
     uint32_t root_dir_index; //Bloco de índice do diretório raiz.
     uint32_t free_blocks; //Número de blocos livres restantes.
-    // TODO - conversar com o Eduardo sobre o block_size
     uint32_t block_size; //log2(tamanho do bloco) - log2(512).
     uint32_t superblock_number; //Numero do bloco que contem o superbloco
     uint32_t version; //Versão do sistema de arquivos

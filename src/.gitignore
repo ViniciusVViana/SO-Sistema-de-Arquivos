@@ -1,2 +1,7 @@
 disk.img.tags
 .vscode/
+*teste*
+SA.h
+reset
+*.bin
+resetimg.cpp
