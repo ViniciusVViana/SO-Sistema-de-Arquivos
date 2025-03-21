@@ -11,13 +11,11 @@ int main(int argc, char *argv[]) {
     }
 
     string diskPath = argv[1]; // Obtém o caminho do disco do primeiro argumento
-    string numBlocos = argv[2];
+    string numBlocks = argv[2];
 
     try {
-        FileSystem fs(diskPath);
-
         // Inicializa o disco com 1000 blocos
-        fs.init(stoi(numBlocos));
+        FileSystem fs(diskPath, stoi(numBlocks));
 
         // Lista o superbloco
         cout << "Superblock:" << endl;
@@ -30,8 +28,14 @@ int main(int argc, char *argv[]) {
         cout << endl;
 
         // Cria um arquivo
-        string filename = "testfile.txt";
-        fs.createFile(filename, 'F'); // 'F' para arquivo comum
+        string filename = "SUBDIR";
+        fs.createFile(filename, '2'); // '2' para arquivo comum
+        filename = "testfile.txt";
+        fs.createFile(filename, '1'); // '1' para arquivo comum
+        filename = "penislongo.txt";
+        fs.createFile(filename, '1'); // '1' para arquivo comum
+
+        cout<<endl;
 
         // Lista os arquivos no diretório raiz
         cout << "Root Directory:" << endl;
@@ -44,7 +48,7 @@ int main(int argc, char *argv[]) {
         uint32_t indexBlock;
         char fileType;
         fs.readFile(filename, &fileType, &indexBlock); // Obtém o bloco de índice do arquivo
-        fs.writeFile(indexBlock, 0, data, dataSize);
+        fs.writeFile(filename, data, dataSize); // Escreve os dados no arquivo
 
         // Lista o bloco de índice do arquivo
         cout << "Index Block of " << filename << ":" << endl;
@@ -53,18 +57,19 @@ int main(int argc, char *argv[]) {
 
         // Lê os dados do arquivo
         char readData[BLOCK_SIZE];
+        cout << "Ler dados do arquivo " << filename << ":" << endl;
         fs.readFile(indexBlock, 0, readData, dataSize);
         cout << "Data read from " << filename << ": " << readData << endl;
         cout << endl;
 
         // Lista o mapa de bits
-        cout << "Bitmap:" << endl;
-        fs.listBitmap();
+        cout << "Free Blocks:" << endl;
+        fs.listFreeBlocks();
         cout << endl;
 
         // Lista o disco (apenas os primeiros 10 blocos para simplificar)
         cout << "Disk (first 10 blocks):" << endl;
-        for (uint32_t i = 0; i < 10; i++) {
+        for (uint32_t i = 2; i < stoi(numBlocks); i++) {
             char blockData[BLOCK_SIZE];
             fs.listDataBlock(i);
         }
@@ -92,9 +97,9 @@ int main(int argc, char *argv[]) {
 }
 
 /*
-# Compilar o programa
+Compilar o programa
 g++ -o filesystem_test main.cpp FileSystem.cpp DiskManager.cpp -std=c++17
 
-# Executar o programa passando o caminho do disco
+Executar o programa passando o caminho do disco
 ./filesystem_test /caminho/para/disk.img
 */

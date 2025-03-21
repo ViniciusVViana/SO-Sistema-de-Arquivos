@@ -55,7 +55,7 @@ struct Superblock{
 // Entrada do diretório raiz
 struct RootDirEntry{
     char filename[FILENAME_SIZE]; //Nome do arquivo/diretório.
-    char  file_type; //Tipo de arquivo (0 para arquivo e 1 para diretório).
+    char  file_type; //Tipo de arquivo (0 para desconhecido e 1 para arquivo e 2 diretório).
     uint32_t index_block; //Número do bloco de índice associado ao arquivo/diretório.
     uint32_t file_size; //Tamanho do arquivo em bytes.
 
@@ -64,12 +64,11 @@ struct RootDirEntry{
     }
 };
 
-struct IndexBlock{
+struct IndexBlock {
     vector<uint32_t> block_ptrs;
     uint32_t indirect_ptr;
 
     IndexBlock() : indirect_ptr(0xFFFFFFFF) {
-        block_ptrs.resize((BLOCK_SIZE / 4) - 1, 0xFFFFFFFF);
+        block_ptrs.resize((BLOCK_SIZE / sizeof(uint32_t)) - 1, 0xFFFFFFFF);
     }
-
 };

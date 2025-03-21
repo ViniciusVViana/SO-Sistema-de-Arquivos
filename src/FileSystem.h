@@ -4,8 +4,8 @@
 #include <string>
 #include <cstring>
 #include <cmath>
-
 #include <cstdint>
+
 #include "DiskManager.h"
 
 
@@ -19,6 +19,8 @@ class FileSystem {
 private:
     DiskManager diskManager;
     Superblock superblock;
+    vector<uint8_t> bitmap; 
+    vector<RootDirEntry> rootDir;
 
     //Calcular numero de blocos para o bitmap
     u_int32_t calcNumBlocksBitmap(u_int32_t numBlocks){
@@ -27,63 +29,66 @@ private:
 
 
 public:
-    FileSystem(string &path) : diskManager(path){}
-
-    //Inicializar o disco com o superbloco e bitmap
-    void init(u_int32_t numBlocks){
-        diskManager.open();
-        
-        superblock.total_blocks =  numBlocks;
-        superblock.bitmap_blocks = calcNumBlocksBitmap(numBlocks);
-        superblock.root_dir_index = 1 + superblock.bitmap_blocks;
-        superblock.free_blocks = numBlocks - 2 - superblock.bitmap_blocks;
-
-        //Inicializar o superbloco no bloco 0
-        diskManager.writeBlock(0, (char*)&superblock);
-
-        //Inicializar o bitmap
-        vector<uint8_t> bitmap(BLOCK_SIZE * superblock.bitmap_blocks, 0);
-        for (u_int32_t i = 0; i < superblock.bitmap_start + superblock.bitmap_blocks; i++){
-            bitmap[i / 8] |= 1 << (i % 8);
-
+    FileSystem(string &path, u_int32_t numBlocks) : diskManager(path) {
+        if(numBlocks < 4){
+            throw runtime_error("Número de blocos insuficiente!");
         }
 
+        
+        // Inicializa o vetor de bitmap
+        bitmap.resize(BLOCK_SIZE * calcNumBlocksBitmap(numBlocks));
+        // Inicializa o vetor de entradas de diretório raiz
+        rootDir.resize(BLOCK_SIZE / ENTRY_SIZE);
+        // Inicializa o superbloco
+        superblock.total_blocks = numBlocks;
+        superblock.bitmap_blocks = calcNumBlocksBitmap(numBlocks);
+        superblock.root_dir_index = superblock.bitmap_blocks + 1;
+        superblock.free_blocks = numBlocks - superblock.root_dir_index - 1;
+
+        // Inicializa o superbloco no bloco 0
+        diskManager.create(numBlocks * BLOCK_SIZE);
+        diskManager.open();
+        diskManager.writeBlock(0, (char*)&superblock);
+        for (u_int32_t i = 0; i < superblock.bitmap_start + superblock.bitmap_blocks + 1; i++){
+            bitmap[i / 8] |= 1 << (i % 8);
+        }
+        diskManager.writeBlock(superblock.bitmap_start, (char*)bitmap.data());
+        diskManager.writeBlock(superblock.root_dir_index, (char*)rootDir.data());
         diskManager.writeBlock(1, (char*)bitmap.data());
-
         diskManager.close();
-
+        
     }
 
+
     // Alocar um bloco
-    u_int32_t allocBlock(){
+    u_int32_t allocBlock() {
         diskManager.open();
-
-        vector<uint8_t> bitmap(BLOCK_SIZE * superblock.bitmap_blocks);
         diskManager.readBlock(superblock.bitmap_start, (char*)bitmap.data());
-
-        for (u_int32_t i = 0; i < superblock.total_blocks; i++){
-            if (!(bitmap[i / 8] & (1 << (i % 8)))){
-                bitmap[i / 8] |= 1 << (i % 8);
+    
+        for (u_int32_t i = 0; i < superblock.total_blocks; i++) { // Começa do bloco 1
+            if (!(bitmap[i / 8] & (1 << (i % 8)))) { // Se o bloco estiver livre
+                bitmap[i / 8] |= 1 << (i % 8); // Marcar o bloco como ocupado
                 superblock.free_blocks--;
+                
+                // Atualiza o bitmap e o superbloco no disco
                 diskManager.writeBlock(superblock.bitmap_start, (char*)bitmap.data());
                 diskManager.writeBlock(0, (char*)&superblock);
+                
                 diskManager.close();
-                return i;
+                return i; // Retorna o bloco alocado
             }
         }
-
+    
         diskManager.close();
-        return 0xFFFFFFFF;
+        return 0xFFFFFFFF; // Retorna erro se não houver blocos livres
     }
 
     //Liberar um bloco
     void freeBlock(u_int32_t blockIndex){
         if(blockIndex >= superblock.total_blocks){
-            throw std::runtime_error("Bloco Inválido!");
+            throw runtime_error("Bloco Inválido!");
         }
         diskManager.open();
-
-        vector<uint8_t> bitmap(BLOCK_SIZE * superblock.bitmap_blocks);
         diskManager.readBlock(superblock.bitmap_start, (char*)bitmap.data());
 
         bitmap[blockIndex / 8] &= ~(1 << (blockIndex % 8));
@@ -96,40 +101,40 @@ public:
     // Criar um arquivo no diretório raiz
     void createFile(string &filename, char filetype){
         diskManager.open();
+        
         uint32_t index_block = allocBlock();
         if(index_block == 0xFFFFFFFF){
-            throw std::runtime_error("Não há blocos disponíveis!");
+            throw runtime_error("Não há blocos disponíveis!");
         }
-
-        RootDirEntry entry;
-        strncpy(entry.filename, filename.c_str(), FILENAME_SIZE);
-        entry.filename[FILENAME_SIZE] = '\0';
-        entry.file_type = filetype;
-        entry.index_block = index_block;
-
-        //Escrever no dir raiz
-        vector<RootDirEntry> rootDir(BLOCK_SIZE / sizeof(RootDirEntry));
+        
+        RootDirEntry newEntry;
+        strncpy(newEntry.filename, filename.c_str(), FILENAME_SIZE);
+        newEntry.filename[FILENAME_SIZE] = '\0';
+        newEntry.file_type = filetype;
+        newEntry.index_block = index_block;
+        
         diskManager.readBlock(superblock.root_dir_index, (char*)rootDir.data());
-
+        
         for(auto &entry : rootDir){
             if(entry.filename[0] == '\0'){
-                entry = entry;
+                entry = newEntry;
                 diskManager.writeBlock(superblock.root_dir_index, (char*)rootDir.data());
                 diskManager.close();
+                cout<<"Arquivo criado com sucesso!"<<endl;
                 return;
             }
         }
-
+        
         diskManager.close();
-        throw std::runtime_error("Diretório raiz cheio!");
+        throw runtime_error("Diretório raiz cheio!");
     }
 
     //Ler um arquivo do diretório raiz
     void readFile(string &filename, char *filetype, u_int32_t *index_block){
         diskManager.open();
-        vector<RootDirEntry> rootDir(BLOCK_SIZE / ENTRY_SIZE);
+        
         diskManager.readBlock(superblock.root_dir_index, (char*)rootDir.data());
-
+    
         for(auto &entry : rootDir){
             if(strcmp(entry.filename, filename.c_str()) == 0){
                 *filetype = entry.file_type;
@@ -138,89 +143,165 @@ public:
                 return;
             }
         }
-
+    
         diskManager.close();
-        throw std::runtime_error("Arquivo não encontrado!");
+        throw runtime_error("Arquivo não encontrado!");
     }
 
     //Excluir um arquivo do diretório raiz
-    void deleteFile(string &filename){
+    void deleteFile(string &filename) {
         diskManager.open();
-        vector<RootDirEntry> rootDir(BLOCK_SIZE / ENTRY_SIZE);
+        
         diskManager.readBlock(superblock.root_dir_index, (char*)rootDir.data());
-
-        for(auto &entry : rootDir){
-            if(strcmp(entry.filename, filename.c_str()) == 0){
+    
+        for (auto &entry : rootDir) {
+            if (strcmp(entry.filename, filename.c_str()) == 0) {
                 IndexBlock ib;
                 diskManager.readBlock(entry.index_block, (char*)&ib);
-                for(auto ptr : ib.block_ptrs){
-                    if(ptr != 0xFFFFFFFF){
+                
+                // Libera os blocos de dados
+                for (auto ptr : ib.block_ptrs) {
+                    if (ptr != 0xFFFFFFFF) {
                         freeBlock(ptr);
                     }
                 }
+                
+                // Libera o bloco de índice
+                freeBlock(entry.index_block);
+                
+                // Remove a entrada do diretório raiz
+                memset(entry.filename, 0, FILENAME_SIZE);
+                entry.file_type = 0;
+                entry.index_block = 0xFFFFFFFF;
+                entry.file_size = 0;
+                
+                // Atualiza o diretório raiz no disco
+                diskManager.writeBlock(superblock.root_dir_index, (char*)rootDir.data());
+                
+                diskManager.close();
                 return;
             }
         }
-
+    
         diskManager.close();
-        throw std::runtime_error("Arquivo não encontrado!");
+        throw runtime_error("Arquivo não encontrado!");
     }
-
     //Escrever em um arquivo
-    void writeFile(uint32_t index_block, uint32_t block_offset, const char *data, uint32_t size) {
-        diskManager.open();
+    void writeFile(const std::string &filename, const char *data, uint32_t size) {
+        try {
+            // Abre o gerenciador de disco
+            diskManager.open();
     
-        IndexBlock ib;
-        diskManager.readBlock(index_block, reinterpret_cast<char*>(&ib));
+            // Lê o bloco de índice do diretório raiz
+            IndexBlock rootIndexBlock;
+            diskManager.readBlock(superblock.root_dir_index, reinterpret_cast<char*>(&rootIndexBlock));
     
-        uint32_t current_block_offset = block_offset;
+            // Procura o arquivo no diretório raiz
+            bool fileFound = false;
+            RootDirEntry fileEntry;
     
-        // Função auxiliar para escrever dados em um bloco de índice
-        auto writeToIndexBlock = [&](IndexBlock &ib, uint32_t &current_block_offset, const char *&data, uint32_t &size) {
-            for (uint32_t i = current_block_offset; i < ib.block_ptrs.size(); i++) {
-                if (size == 0) {
-                    break;
+            for (uint32_t i = 0; i < rootIndexBlock.block_ptrs.size(); i++) {
+                if (rootIndexBlock.block_ptrs[i] == 0xFFFFFFFF) {
+                    continue; // Bloco de dados do diretório raiz não alocado
                 }
     
-                // Se o ponteiro direto estiver vazio, aloca um novo bloco
-                if (ib.block_ptrs[i] == 0xFFFFFFFF) {
-                    ib.block_ptrs[i] = allocBlock();
+                // Verifica se o ponteiro do bloco é válido
+                if (rootIndexBlock.block_ptrs[i] >= superblock.total_blocks) {
+                    throw std::runtime_error("Ponteiro de bloco de dados do diretório raiz inválido!");
+                }
+    
+                // Lê o bloco de dados do diretório raiz
+                std::vector<RootDirEntry> dirEntries(BLOCK_SIZE / sizeof(RootDirEntry));
+                diskManager.readBlock(rootIndexBlock.block_ptrs[i], reinterpret_cast<char*>(dirEntries.data()));
+    
+                // Procura o arquivo no bloco de dados do diretório raiz
+                for (const auto &entry : dirEntries) {
+                    if (entry.filename[0] != '\0' && strcmp(entry.filename, filename.c_str()) == 0) {
+                        fileFound = true;
+                        fileEntry = entry;
+                        break;
+                    }
+                }
+    
+                if (fileFound) {
+                    break;
+                }
+            }
+    
+            if (!fileFound) {
+                throw std::runtime_error("Arquivo não encontrado no diretório raiz!");
+            }
+    
+            // Acessa o bloco de índice do arquivo
+            IndexBlock fileIndexBlock;
+            diskManager.readBlock(fileEntry.index_block, reinterpret_cast<char*>(&fileIndexBlock));
+    
+            // Escreve os dados no arquivo
+            uint32_t bytesWritten = 0;
+            uint32_t currentBlockOffset = 0;
+    
+            while (bytesWritten < size) {
+                // Verifica se o offset está dentro dos limites
+                if (currentBlockOffset >= fileIndexBlock.block_ptrs.size()) {
+                    throw std::runtime_error("Offset de bloco fora dos limites!");
+                }
+    
+                // Verifica se o ponteiro de bloco é válido
+                if (fileIndexBlock.block_ptrs[currentBlockOffset] == 0xFFFFFFFF) {
+                    // Aloca um novo bloco de dados
+                    fileIndexBlock.block_ptrs[currentBlockOffset] = allocBlock();
+                    if (fileIndexBlock.block_ptrs[currentBlockOffset] == 0xFFFFFFFF) {
+                        throw std::runtime_error("Não há blocos disponíveis para alocação!");
+                    }
+                }
+    
+                if (fileIndexBlock.block_ptrs[currentBlockOffset] >= superblock.total_blocks) {
+                    throw std::runtime_error("Ponteiro de bloco inválido!");
                 }
     
                 // Escreve os dados no bloco de dados
-                uint32_t write_size = getMin<uint32_t>(size, BLOCK_SIZE);
-                diskManager.writeBlock(ib.block_ptrs[i], (char *)data);
-                size -= write_size;
-                data += write_size;
-                current_block_offset++;
-            }
-        };
-    
-        // Escreve nos ponteiros diretos do bloco de índice atual
-        writeToIndexBlock(ib, current_block_offset, data, size);
-    
-        // Se ainda houver dados para escrever, usa ponteiros indiretos
-        while (size > 0) {
-            // Se não houver um bloco de índice indireto, aloca um
-            if (ib.indirect_ptr == 0xFFFFFFFF) {
-                ib.indirect_ptr = allocBlock();
+                uint32_t writeSize = std::min(size - bytesWritten, BLOCK_SIZE);
+                diskManager.writeBlock(fileIndexBlock.block_ptrs[currentBlockOffset], reinterpret_cast<void*>(const_cast<char*>(data + bytesWritten)));
+                bytesWritten += writeSize;
+                currentBlockOffset++;
             }
     
-            // Lê o bloco de índice indireto
-            IndexBlock indirect_ib;
-            diskManager.readBlock(ib.indirect_ptr, reinterpret_cast<char*>(&indirect_ib));
+            // Atualiza o bloco de índice do arquivo no disco
+            diskManager.writeBlock(fileEntry.index_block, reinterpret_cast<char*>(&fileIndexBlock));
     
-            // Escreve nos ponteiros diretos do bloco de índice indireto
-            writeToIndexBlock(indirect_ib, current_block_offset, data, size);
+            // Atualiza o tamanho do arquivo no diretório raiz
+            fileEntry.file_size = bytesWritten;
     
-            // Atualiza o bloco de índice indireto no disco
-            diskManager.writeBlock(ib.indirect_ptr, reinterpret_cast<char*>(&indirect_ib));
+            // Atualiza a entrada do diretório raiz no disco
+            for (uint32_t i = 0; i < rootIndexBlock.block_ptrs.size(); i++) {
+                if (rootIndexBlock.block_ptrs[i] == 0xFFFFFFFF) {
+                    continue; // Bloco de dados do diretório raiz não alocado
+                }
+    
+                // Lê o bloco de dados do diretório raiz
+                std::vector<RootDirEntry> dirEntries(BLOCK_SIZE / sizeof(RootDirEntry));
+                diskManager.readBlock(rootIndexBlock.block_ptrs[i], reinterpret_cast<char*>(dirEntries.data()));
+    
+                // Procura o arquivo no bloco de dados do diretório raiz
+                for (auto &entry : dirEntries) {
+                    if (entry.filename[0] != '\0' && strcmp(entry.filename, filename.c_str()) == 0) {
+                        entry = fileEntry;
+                        diskManager.writeBlock(rootIndexBlock.block_ptrs[i], reinterpret_cast<char*>(dirEntries.data()));
+                        break;
+                    }
+                }
+            }
+    
+            // Fecha o gerenciador de disco
+            diskManager.close();
+    
+            std::cout << "Dados escritos no arquivo com sucesso!" << std::endl;
+        } catch (const std::exception &e) {
+            // Fecha o gerenciador de disco em caso de erro
+            diskManager.close();
+            std::cerr << "Erro ao escrever no arquivo: " << e.what() << std::endl;
+            throw; // Re-lança a exceção para tratamento adicional
         }
-    
-        // Atualiza o bloco de índice no disco
-        diskManager.writeBlock(index_block, reinterpret_cast<char*>(&ib));
-    
-        diskManager.close();
     }
 
     //Ler de um arquivo
@@ -267,8 +348,7 @@ public:
     //Listar os arquivos do diretório raiz
     void listFiles() {
         diskManager.open();
-    
-        vector<RootDirEntry> rootDir(BLOCK_SIZE / ENTRY_SIZE);
+
         diskManager.readBlock(superblock.root_dir_index, reinterpret_cast<char*>(rootDir.data()));
     
         for (const auto &entry : rootDir) {
@@ -281,12 +361,19 @@ public:
     }
 
     //Listar os blocos livres
+    //Ao listar os blocos livres estao aparecendo mais do que deviam, pois o superbloco deiz uma coisa e o listFreeBlocks diz outra
     void listFreeBlocks() {
         diskManager.open();
     
-        vector<uint8_t> bitmap(BLOCK_SIZE * superblock.bitmap_blocks);
         diskManager.readBlock(superblock.bitmap_start, reinterpret_cast<char*>(bitmap.data()));
-    
+
+        //printar todo o bitmap
+        for (uint32_t i = 0; i < superblock.total_blocks; i++) {
+            cout << ((bitmap[i / 8] & (1 << (i % 8))) ? "1" : "0");
+        }
+
+        cout << " | ";
+
         for (uint32_t i = 0; i < superblock.total_blocks; i++) {
             if (!(bitmap[i / 8] & (1 << (i % 8))) && i != 0) {
                 cout << i << " ";
@@ -343,11 +430,48 @@ public:
         diskManager.close();
     }
 
+    void listFileDataBlocks(uint32_t index_block) {
+        diskManager.open();
+        
+        IndexBlock ib;
+        diskManager.readBlock(index_block, reinterpret_cast<char*>(&ib));
+        
+        cout << "Index Block: " << index_block << endl;
+        cout << "Direct Pointers: ";
+        for (const auto &ptr : ib.block_ptrs) {
+            if (ptr != 0xFFFFFFFF) {
+                cout << ptr << " ";
+            }
+        }
+        cout << endl;
+        cout << "Indirect Pointer: " << ib.indirect_ptr << endl;
+        
+        // Listar os blocos de dados diretos
+        for (const auto &ptr : ib.block_ptrs) {
+            if (ptr != 0xFFFFFFFF) {
+                listDataBlock(ptr);
+            }
+        }
+        
+        // Listar os blocos de dados indiretos
+        if (ib.indirect_ptr != 0xFFFFFFFF) {
+            IndexBlock indirect_ib;
+            diskManager.readBlock(ib.indirect_ptr, reinterpret_cast<char*>(&indirect_ib));
+            
+            for (const auto &ptr : indirect_ib.block_ptrs) {
+                if (ptr != 0xFFFFFFFF) {
+                    listDataBlock(ptr);
+                }
+            }
+        }
+        
+        diskManager.close();
+    }
+
     // Listar mapa de bits
     void listBitmap() {
         diskManager.open();
     
-        vector<uint8_t> bitmap(BLOCK_SIZE * superblock.bitmap_blocks);
         diskManager.readBlock(superblock.bitmap_start, reinterpret_cast<char*>(bitmap.data()));
     
         for (uint32_t i = 0; i < superblock.total_blocks; i++) {
