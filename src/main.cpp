@@ -35,11 +35,16 @@ int main(int argc, char *argv[]) {
         filename = "thomasturbano.txt";
         fs.createFile(filename, '1'); // '1' para arquivo comum
 
+        //Criar um arquivo dentro de um diretório
+        string parentDir = "SUBDIR";
+        filename = "arquivoDentroDeDiretorio.txt";
+        fs.createFile(filename, '1', parentDir); // '1' para arquivo comum
+
         cout<<endl;
 
         // Lista os arquivos no diretório raiz
         cout << "Root Directory:" << endl;
-        fs.listFiles();
+        fs.listFilesRecursively();
         cout << endl;
 
         cout << "Free Blocks:" << endl;
@@ -48,12 +53,12 @@ int main(int argc, char *argv[]) {
 
         //TODO: creio que ao escrever algum dado no arquivo, estamos enxendo ele de lixo
         // Escreve dados no arquivo
-        const char *data = "Hello, world! This is a test file.";
-        uint32_t dataSize = strlen(data);
-        uint32_t indexBlock;
-        char fileType;
-        fs.readFile(filename, &fileType, &indexBlock); // Obtém o bloco de índice do arquivo
-        fs.writeFile(filename, data, dataSize); // Escreve os dados no arquivo
+        // const char *data = "Hello, world! This is a test file.";
+        // uint32_t dataSize = strlen(data);
+        // uint32_t indexBlock;
+        // char fileType;
+        // fs.readFile(filename, &fileType, &indexBlock); // Obtém o bloco de índice do arquivo
+        // fs.writeFile(filename, data, dataSize); // Escreve os dados no arquivo
  
         // Lista o bloco de índice do arquivo
         // cout << "Index Block of " << filename << ":" << endl;
@@ -103,7 +108,7 @@ int main(int argc, char *argv[]) {
 
 /*
 Compilar o programa
-g++ -o filesystem_test main.cpp FileSystem.cpp DiskManager.cpp -std=c++17
+g++ -o main main.cpp -std=c++17
 
 Executar o programa passando o caminho do disco
 ./filesystem_test /caminho/para/disk.img
