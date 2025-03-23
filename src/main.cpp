@@ -1,4 +1,5 @@
-#include "FileSystem.h" // Inclua o arquivo de cabeçalho do seu sistema de arquivos
+// Alunos: Guilherme Deitos, Vinicius Viana e Vinicius Eduardo
+#include "FileSystem.h" 
 
 using namespace std;
 
@@ -110,3 +111,8 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+
+/*
+    Compilar: g++ -o nome_arq main.cpp -std=c++17
+    Executar: ./nome_arq <caminho_do_disco> <numero_de_blocos>
+*/
