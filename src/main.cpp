@@ -1,10 +1,24 @@
-#include <iostream>
-#include "FileSystem.h"
+#include "FileSystem.h" // Inclua o arquivo de cabeçalho do seu sistema de arquivos
 
 using namespace std;
 
+void displayMenu() {
+    cout << "===== Sistema de Arquivos =====" << endl;
+    cout << "1. Criar Arquivo" << endl;
+    cout << "2. Ler Arquivo" << endl;
+    cout << "3. Escrever em Arquivo - Não funciona" << endl; 
+    cout << "4. Deletar Arquivo" << endl;
+    cout << "5. Listar Arquivos" << endl;
+    cout << "6. Listar Blocos Livres" << endl;
+    cout << "7. Listar Superbloco" << endl;
+    cout << "8. Listar Bitmap" << endl;
+    cout << "9. Listar Disco em Hexadecimal" << endl;
+    cout << "10. Sair" << endl;
+    cout << "==============================" << endl;
+    cout << "Escolha uma opção: ";
+}
+
 int main(int argc, char *argv[]) {
-    // Verifica se o caminho do disco foi fornecido
     if (argc < 3) {
         cerr << "Uso: " << argv[0] << " <caminho_do_disco> <numero_de_blocos>" << endl;
         return EXIT_FAILURE;
@@ -13,103 +27,86 @@ int main(int argc, char *argv[]) {
     string diskPath = argv[1]; // Obtém o caminho do disco do primeiro argumento
     string numBlocks = argv[2];
 
-    try {
-        // Inicializa o disco com 1000 blocos
-        FileSystem fs(diskPath, stoi(numBlocks));
 
-        // Lista o superbloco
-        cout << "Superblock:" << endl;
-        fs.listSuperblock();
-        cout << endl;
+    FileSystem fs(diskPath, stoi(numBlocks));
 
-        // Lista os blocos livres
-        cout << "Free Blocks:" << endl;
-        fs.listFreeBlocks();
-        cout << endl;
+    string choice;
+    string filename;
+    char filetype;
+    uint32_t index_block;
+    char data[BLOCK_SIZE];
+    uint32_t size;
 
-        // Cria um arquivo
-        string filename = "SUBDIR";
-        fs.createFile(filename, '2'); // '2' para arquivo comum
-        filename = "testfile.txt";
-        fs.createFile(filename, '1'); // '1' para arquivo comum
-        filename = "thomasturbano.txt";
-        fs.createFile(filename, '1'); // '1' para arquivo comum
+    do {
+        displayMenu();
+        cin >> choice;
+        cin.ignore(); // Limpa o buffer do teclado
 
-        //Criar um arquivo dentro de um diretório
-        string parentDir = "SUBDIR";
-        filename = "arquivoDentroDeDiretorio.txt";
-        fs.createFile(filename, '1', parentDir); // '1' para arquivo comum
+        switch (stoi(choice)) {
+            case 1: {
+                cout << "Digite o nome do arquivo: ";
+                getline(cin, filename);
+                cout << "Digite o tipo do arquivo (1 para arquivo, 2 para diretório): ";
+                cin >> filetype;
+                cin.ignore();
+                fs.createFile(filename, filetype);
+                break;
+            }
+            case 2: {
+                cout << "Digite o nome do arquivo: ";
+                getline(cin, filename);
+                fs.readFile(filename, &filetype, &index_block);
+                cout << "Tipo do arquivo: " << filetype << ", Bloco de índice: " << index_block << endl;
+                break;
+            }
+            case 3: {
+                cout << "Digite o nome do arquivo: ";
+                getline(cin, filename);
+                cout << "Digite os dados a serem escritos: ";
+                cin.getline(data, BLOCK_SIZE);
+                cout << "Digite o tamanho dos dados: ";
+                cin >> size;
+                cin.ignore();
+                fs.writeFile(filename, data, size);
+                break;
+            }
+            case 4: {
+                cout << "Digite o nome do arquivo: ";
+                getline(cin, filename);
+                fs.deleteFile(filename);
+                break;
+            }
+            case 5: {
+                fs.listFilesRecursively();
+                break;
+            }
+            case 6: {
+                fs.listFreeBlocks();
+                break;
+            }
+            case 7: {
+                fs.listSuperblock();
+                break;
+            }
+            case 8: {
+                fs.listBitmap();
+                break;
+            }
+            case 9: {
+                fs.listDiskHex();
+                break;
+            }
+            case 10: {
+                cout << "Saindo..." << endl;
+                break;
+            }
+            default: {
+                cout << "Opção inválida! Tente novamente." << endl;
+                break;
+            }
+        }
+        cin.get();
+    } while (stoi(choice) != 10);
 
-        cout<<endl;
-
-        // Lista os arquivos no diretório raiz
-        cout << "Root Directory:" << endl;
-        fs.listFilesRecursively();
-        cout << endl;
-
-        cout << "Free Blocks:" << endl;
-        fs.listFreeBlocks();
-        cout << endl;
-
-        //TODO: creio que ao escrever algum dado no arquivo, estamos enxendo ele de lixo
-        // Escreve dados no arquivo
-        // const char *data = "Hello, world! This is a test file.";
-        // uint32_t dataSize = strlen(data);
-        // uint32_t indexBlock;
-        // char fileType;
-        // fs.readFile(filename, &fileType, &indexBlock); // Obtém o bloco de índice do arquivo
-        // fs.writeFile(filename, data, dataSize); // Escreve os dados no arquivo
- 
-        // Lista o bloco de índice do arquivo
-        // cout << "Index Block of " << filename << ":" << endl;
-        // //fs.listIndexBlock(indexBlock);
-        // cout << endl;
-
-        // // Lê os dados do arquivo
-        // char readData[BLOCK_SIZE];
-        // cout << "Ler dados do arquivo " << filename << ":" << endl;
-        // fs.readFile(indexBlock, 0, readData, dataSize);
-        // cout << "Data read from " << filename << ": " << readData << endl;
-        // cout << endl;
-
-        // // Lista o mapa de bits
-        // cout << "Free Blocks:" << endl;
-        // fs.listFreeBlocks();
-        // cout << endl;
-
-        // // Lista o disco (apenas os primeiros 10 blocos para simplificar)
-        // cout << "Disk (first 10 blocks):" << endl;
-        // for (uint32_t i = 2; i < stoi(numBlocks); i++) {
-        //     char blockData[BLOCK_SIZE];
-        //     fs.listDataBlock(i);
-        // }
-        // cout << endl;
-
-        // // Exclui o arquivo
-        // fs.deleteFile(filename);
-
-        // // Lista os arquivos no diretório raiz após exclusão
-        // cout << "Root Directory after deletion:" << endl;
-        // fs.listFiles();
-        // cout << endl;
-
-        // // Lista os blocos livres após exclusão
-        // cout << "Free Blocks after deletion:" << endl;
-        // fs.listFreeBlocks();
-        // cout << endl;
-
-    } catch (const exception &e) {
-        cerr << "Error: " << e.what() << endl;
-        return EXIT_FAILURE;
-    }
-
-    return EXIT_SUCCESS;
+    return 0;
 }
-
-/*
-Compilar o programa
-g++ -o main main.cpp -std=c++17
-
-Executar o programa passando o caminho do disco
-./filesystem_test /caminho/para/disk.img
-*/
